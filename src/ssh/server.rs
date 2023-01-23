@@ -1,24 +1,26 @@
+use russh::server;
+use russh::server::Config;
+use russh::MethodSet;
+use russh_keys::key::KeyPair;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+use std::net::SocketAddrV4;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use thrussh::server;
-use thrussh::MethodSet;
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::watch;
 
 use super::handler::ThinHandler;
-#[allow(unused_imports)]
-use super::key::SshServerKey;
 use super::session_manager::SessionManager;
 use super::session_manager::SessionRepoUpdate;
 
 pub struct Server {
     pub listen: IpAddr,
     pub port: u16,
-    pub server_key: SshServerKey,
+    pub server_key: KeyPair,
     pub connection_timeout: Duration,
     pub auth_rejection_time: Duration,
     pub exit_rx: watch::Receiver<bool>,
@@ -28,7 +30,7 @@ pub struct Server {
 
 impl Server {
     pub async fn new(
-        server_key: SshServerKey,
+        server_key: KeyPair,
         rx_exit: watch::Receiver<bool>,
         sender: Sender<SessionRepoUpdate>,
         port: u16,
@@ -48,7 +50,7 @@ impl Server {
         self,
         mut session_repository: SessionManager,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut config = thrussh::server::Config::default();
+        let mut config = Config::default();
         config.connection_timeout = Some(self.connection_timeout.clone());
         config.auth_rejection_time = self.auth_rejection_time.clone();
         config.keys.push(self.server_key.clone().into());
@@ -64,7 +66,12 @@ impl Server {
             session_repository.wait_for_sessions().await;
         });
 
-        thrussh::server::run(config, addr.as_str(), self).await?;
+        russh::server::run(
+            config,
+            &SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), self.port)),
+            self,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -72,8 +79,7 @@ impl Server {
 impl server::Server for Server {
     type Handler = ThinHandler;
 
-    // Called for each new connection.
-    fn new(&mut self, _peer_addr: Option<std::net::SocketAddr>) -> ThinHandler {
+    fn new_client(&mut self, _peer_addr: Option<SocketAddr>) -> Self::Handler {
         ThinHandler::new(self.session_sender.clone())
     }
 }

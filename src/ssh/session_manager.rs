@@ -2,8 +2,8 @@ use std::{fmt::Debug, fs::File, time::Duration};
 
 use crate::cursive::Vec2;
 use async_std::io::WriteExt;
-use thrussh::{server::Handle, ChannelId, CryptoVec};
-use thrussh_keys::key::PublicKey;
+use russh::{server::Handle, ChannelId, CryptoVec};
+use russh_keys::key::PublicKey;
 use tokio::{
     spawn,
     sync::{
@@ -72,7 +72,7 @@ impl SessionManager {
     }
 
     async fn handle_session(
-        mut handle: Handle,
+        handle: Handle,
         channel_id: ChannelId,
         mut update_rx: Receiver<SshSessionUpdate>,
         key: PublicKey,

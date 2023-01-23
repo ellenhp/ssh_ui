@@ -5,7 +5,7 @@ use crate::cursive::Cursive;
 use crate::cursive::Vec2;
 use crate::App;
 
-use thrussh_keys::key::PublicKey;
+use russh_keys::key::PublicKey;
 
 use super::backend::{Backend, CursiveOutput};
 
@@ -71,7 +71,7 @@ impl PluginManager {
             self.resize_receiver,
             self.relayout_sender,
         )
-        .expect("Thrussh backend creation failed");
+        .expect("Russh backend creation failed");
 
         let mut runner = siv.runner(backend);
         runner.refresh();

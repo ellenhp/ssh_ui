@@ -8,10 +8,10 @@ use std::{error::Error, sync::Arc};
 use cursive::View;
 
 pub use cursive;
-pub use thrussh_keys::key;
+pub use russh_keys::key;
 
+use russh_keys::key::KeyPair;
 use ssh::{plugin::set_plugin, server::Server, session_manager::SessionManager};
-use thrussh_keys::key::KeyPair;
 use tokio::sync::{mpsc, watch};
 
 pub trait AppSession {

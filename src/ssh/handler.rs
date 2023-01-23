@@ -1,12 +1,10 @@
+use russh::server::Auth;
+use russh::server::Handler;
+use russh::server::Session;
+use russh::ChannelId;
+use russh_keys::key::PublicKey;
 use std::future::Future;
 use std::pin::Pin;
-use thrussh::server::Auth;
-use thrussh::server::Handler;
-use thrussh::server::Session;
-use thrussh::ChannelId;
-use thrussh_keys::key::ed25519;
-use thrussh_keys::key::OpenSSLPKey;
-use thrussh_keys::key::PublicKey;
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
 
@@ -35,25 +33,25 @@ impl Handler for ThinHandler {
     type FutureBool =
         Pin<Box<dyn Future<Output = Result<(Self, Session, bool), Self::Error>> + Send>>;
 
-    fn channel_open_session(mut self, channel: ChannelId, session: Session) -> Self::FutureUnit {
+    fn channel_open_session(mut self, channel: ChannelId, session: Session) -> Self::FutureBool {
         let (session_update_sender, session_update_receiver) = tokio::sync::mpsc::channel(100);
         self.session_update_sender = Some(session_update_sender);
         let sender = self.session_repo_update_sender.clone();
         let handle = session.handle();
-        let key = clone_option_public_key(&self.pubkey);
+        let pubkey = self.pubkey.clone().expect("pubkey not set");
         spawn(async move {
             sender
                 .send(SessionRepoUpdate::NewSession(
                     handle,
                     channel,
                     session_update_receiver,
-                    key,
+                    pubkey,
                 ))
                 .await
                 .unwrap();
         });
 
-        self.finished(session)
+        self.finished_bool(true, session)
     }
 
     fn finished_auth(self, auth: Auth) -> Self::FutureAuth {
@@ -69,7 +67,9 @@ impl Handler for ThinHandler {
     }
 
     fn auth_none(self, _user: &str) -> Self::FutureAuth {
-        self.finished_auth(Auth::Reject)
+        self.finished_auth(Auth::Reject {
+            proceed_with_methods: None,
+        })
     }
 
     fn channel_close(self, _channel: ChannelId, session: Session) -> Self::FutureUnit {
@@ -81,7 +81,7 @@ impl Handler for ThinHandler {
     }
 
     fn auth_publickey(mut self, _user: &str, public_key: &PublicKey) -> Self::FutureAuth {
-        self.pubkey = Some(clone_public_key(public_key));
+        self.pubkey = Some(public_key.clone());
         self.finished_auth(Auth::Accept)
     }
 
@@ -113,7 +113,7 @@ impl Handler for ThinHandler {
         row_height: u32,
         pix_width: u32,
         pix_height: u32,
-        modes: &[(thrussh::Pty, u32)],
+        modes: &[(russh::Pty, u32)],
         session: Session,
     ) -> Self::FutureUnit {
         let sender = self.session_update_sender.clone();
@@ -161,27 +161,4 @@ impl Handler for ThinHandler {
 
 impl Drop for ThinHandler {
     fn drop(&mut self) {}
-}
-
-fn clone_public_key(key: &PublicKey) -> PublicKey {
-    match key {
-        PublicKey::Ed25519(a) => PublicKey::Ed25519(ed25519::PublicKey { key: a.key.clone() }),
-        PublicKey::RSA { key, hash } => PublicKey::RSA {
-            key: OpenSSLPKey(key.0.clone()),
-            hash: hash.clone(),
-        },
-    }
-}
-
-fn clone_option_public_key(key: &Option<PublicKey>) -> PublicKey {
-    match key {
-        Some(PublicKey::Ed25519(a)) => {
-            PublicKey::Ed25519(ed25519::PublicKey { key: a.key.clone() })
-        }
-        Some(PublicKey::RSA { key, hash }) => PublicKey::RSA {
-            key: OpenSSLPKey(key.0.clone()),
-            hash: hash.clone(),
-        },
-        None => panic!("No public key"),
-    }
 }
