@@ -2,6 +2,12 @@
 name = "ssh_ui"
 version = "0.1.0"
 edition = "2021"
+description = "Painlessly expose Rust TUI applications over ssh"
+license = "MIT"
+repository = "https://github.com/ellenhp/ssh_ui/"
+keywords = ["cursive", "tui", "ssh", "terminal"]
+categories = ["command-line-interface"]
+readme = "README.md"
 
 [dependencies]
 thrussh = { version = "0.33.5", features = ["openssl"] }
