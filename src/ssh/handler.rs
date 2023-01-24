@@ -1,10 +1,11 @@
+use anyhow::Ok;
 use russh::server::Auth;
 use russh::server::Handler;
+use russh::server::Msg;
 use russh::server::Session;
+use russh::Channel;
 use russh::ChannelId;
 use russh_keys::key::PublicKey;
-use std::future::Future;
-use std::pin::Pin;
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
 
@@ -27,13 +28,13 @@ impl ThinHandler {
     }
 }
 
+#[async_trait::async_trait]
 impl Handler for ThinHandler {
-    type FutureAuth = Pin<Box<dyn Future<Output = Result<(Self, Auth), Self::Error>> + Send>>;
-    type FutureUnit = Pin<Box<dyn Future<Output = Result<(Self, Session), Self::Error>> + Send>>;
-    type FutureBool =
-        Pin<Box<dyn Future<Output = Result<(Self, Session, bool), Self::Error>> + Send>>;
-
-    fn channel_open_session(mut self, channel: ChannelId, session: Session) -> Self::FutureBool {
+    async fn channel_open_session(
+        mut self,
+        channel: Channel<Msg>,
+        session: Session,
+    ) -> Result<(Self, bool, Session), Self::Error> {
         let (session_update_sender, session_update_receiver) = tokio::sync::mpsc::channel(100);
         self.session_update_sender = Some(session_update_sender);
         let sender = self.session_repo_update_sender.clone();
@@ -43,7 +44,7 @@ impl Handler for ThinHandler {
             sender
                 .send(SessionRepoUpdate::NewSession(
                     handle,
-                    channel,
+                    channel.id(),
                     session_update_receiver,
                     pubkey,
                 ))
@@ -51,41 +52,45 @@ impl Handler for ThinHandler {
                 .unwrap();
         });
 
-        self.finished_bool(true, session)
+        Ok((self, true, session))
     }
 
-    fn finished_auth(self, auth: Auth) -> Self::FutureAuth {
-        Box::pin(async move { Ok((self, auth)) })
+    async fn auth_publickey(
+        mut self,
+        _user: &str,
+        public_key: &PublicKey,
+    ) -> Result<(Self, Auth), Self::Error> {
+        self.pubkey = Some(public_key.clone());
+        Ok((self, Auth::Accept))
     }
 
-    fn finished_bool(self, b: bool, session: Session) -> Self::FutureBool {
-        Box::pin(async move { Ok((self, session, b)) })
+    async fn auth_none(self, _user: &str) -> Result<(Self, Auth), Self::Error> {
+        Ok((
+            self,
+            Auth::Reject {
+                proceed_with_methods: None,
+            },
+        ))
     }
 
-    fn finished(self, session: Session) -> Self::FutureUnit {
-        Box::pin(async move { Ok((self, session)) })
-    }
-
-    fn auth_none(self, _user: &str) -> Self::FutureAuth {
-        self.finished_auth(Auth::Reject {
-            proceed_with_methods: None,
-        })
-    }
-
-    fn channel_close(self, _channel: ChannelId, session: Session) -> Self::FutureUnit {
+    async fn channel_close(
+        self,
+        _channel: ChannelId,
+        session: Session,
+    ) -> Result<(Self, Session), Self::Error> {
         let sender = self.session_update_sender.clone().unwrap();
         spawn(async move {
             sender.send(SshSessionUpdate::Close).await.unwrap();
         });
-        self.finished(session)
+        Result::Ok((self, session))
     }
 
-    fn auth_publickey(mut self, _user: &str, public_key: &PublicKey) -> Self::FutureAuth {
-        self.pubkey = Some(public_key.clone());
-        self.finished_auth(Auth::Accept)
-    }
-
-    fn data(self, _channel: ChannelId, data: &[u8], session: Session) -> Self::FutureUnit {
+    async fn data(
+        self,
+        _channel: ChannelId,
+        data: &[u8],
+        session: Session,
+    ) -> Result<(Self, Session), Self::Error> {
         let data = data.to_vec();
         let sender = self.session_update_sender.clone();
         spawn(async move {
@@ -96,26 +101,28 @@ impl Handler for ThinHandler {
                 .await
                 .unwrap();
         });
-        self.finished(session)
+        Result::Ok((self, session))
     }
 
-    #[allow(unused_variables)]
-    fn shell_request(self, channel: ChannelId, session: Session) -> Self::FutureUnit {
-        self.finished(session)
-    }
-
-    #[allow(unused_variables)]
-    fn pty_request(
+    async fn shell_request(
         self,
-        channel: ChannelId,
-        term: &str,
+        _channel: ChannelId,
+        session: Session,
+    ) -> Result<(Self, Session), Self::Error> {
+        Result::Ok((self, session))
+    }
+
+    async fn pty_request(
+        self,
+        _channel: ChannelId,
+        _term: &str,
         col_width: u32,
         row_height: u32,
-        pix_width: u32,
-        pix_height: u32,
-        modes: &[(russh::Pty, u32)],
+        _pix_width: u32,
+        _pix_height: u32,
+        _modes: &[(russh::Pty, u32)],
         session: Session,
-    ) -> Self::FutureUnit {
+    ) -> Result<(Self, Session), Self::Error> {
         let sender = self.session_update_sender.clone();
         spawn(async move {
             sender
@@ -128,19 +135,18 @@ impl Handler for ThinHandler {
                 .await
                 .unwrap();
         });
-        self.finished(session)
+        Result::Ok((self, session))
     }
 
-    #[allow(unused_variables)]
-    fn window_change_request(
+    async fn window_change_request(
         self,
-        channel: ChannelId,
+        _channel: ChannelId,
         col_width: u32,
         row_height: u32,
-        pix_width: u32,
-        pix_height: u32,
+        _pix_width: u32,
+        _pix_height: u32,
         session: Session,
-    ) -> Self::FutureUnit {
+    ) -> Result<(Self, Session), Self::Error> {
         let sender = self.session_update_sender.clone();
         spawn(async move {
             sender
@@ -153,7 +159,7 @@ impl Handler for ThinHandler {
                 .await
                 .unwrap();
         });
-        self.finished(session)
+        Result::Ok((self, session))
     }
 
     type Error = anyhow::Error;

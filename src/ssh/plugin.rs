@@ -63,9 +63,12 @@ impl PluginManager {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut siv = Cursive::new();
 
+        let (client_facing_relayout_sender, client_facing_relayout_receiver) =
+            std::sync::mpsc::channel();
+
         let plugin = get_plugin().unwrap();
         let mut session = plugin.as_ref().new_session();
-        let view = session.on_start(&mut siv, handle_id, pub_key)?;
+        let view = session.on_start(&mut siv, handle_id, pub_key, client_facing_relayout_sender)?;
         siv.add_layer(view);
 
         let backend = Backend::init_ssh(
@@ -76,7 +79,10 @@ impl PluginManager {
         )
         .expect("Russh backend creation failed");
 
-        let runtime = Builder::new_multi_thread().worker_threads(2).build()?;
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()?;
         let _enter = runtime.handle().enter();
 
         {
@@ -87,14 +93,19 @@ impl PluginManager {
 
             runner.refresh();
             runner.on_event(Event::Refresh);
-            let mut counter = 0usize;
             while runner.is_running() && !*exit_rx.borrow_and_update() {
-                runner.step();
-                if counter % 10 == 0 || self.relayout_receiver.try_recv().is_ok() {
+                if self.relayout_receiver.try_recv().is_ok()
+                    || client_facing_relayout_receiver.try_recv().is_ok()
+                {
+                    // TODO: Figure out why this is necessary. It seems like we do actually need two refreshes and a step to make this work :(
                     runner.refresh();
                     runner.on_event(Event::Refresh);
+                    runner.step();
+                    runner.refresh();
+                    runner.on_event(Event::Refresh);
+                } else {
+                    runner.step();
                 }
-                counter += 1;
             }
         }
         Ok(())

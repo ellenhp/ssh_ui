@@ -3,7 +3,10 @@ pub(crate) mod ssh;
 #[macro_use]
 extern crate lazy_static;
 
-use std::{error::Error, sync::Arc};
+use std::{
+    error::Error,
+    sync::{mpsc::Sender, Arc},
+};
 
 use cursive::View;
 
@@ -24,6 +27,7 @@ pub trait AppSession {
         siv: &mut cursive::Cursive,
         session_handle: SessionHandle,
         pub_key: russh_keys::key::PublicKey,
+        force_refresh_sender: Sender<()>,
     ) -> Result<Box<dyn View>, Box<dyn Error>>;
 
     /// Called when the session ticks.

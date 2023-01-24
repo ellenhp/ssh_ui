@@ -1,4 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::{
+    error::Error,
+    sync::{mpsc::Sender, Arc},
+};
 
 use cursive::Cursive;
 use russh_keys::key::SignatureHash;
@@ -22,6 +25,7 @@ impl AppSession for DialogAppSession {
         _siv: &mut Cursive,
         _session_handle: SessionHandle,
         _pub_key: PublicKey,
+        _force_refresh_sender: Sender<()>,
     ) -> Result<Box<dyn cursive::View>, Box<dyn Error>> {
         println!("on_start");
         Ok(Box::new(
