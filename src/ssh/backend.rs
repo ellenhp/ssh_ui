@@ -321,7 +321,6 @@ impl backend::Backend for Backend {
 
     fn refresh(&mut self) {
         // TODO: Is this important for ssh connections?
-        // self.terminal.get_mut().flush().unwrap();
     }
 
     fn print_at(&self, pos: Vec2, text: &str) {

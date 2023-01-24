@@ -3,9 +3,11 @@ use std::sync::{Arc, Mutex};
 
 use crate::cursive::Cursive;
 use crate::cursive::Vec2;
-use crate::App;
+use crate::{App, SessionHandle};
 
+use cursive::event::Event;
 use russh_keys::key::PublicKey;
+use tokio::runtime::Builder;
 
 use super::backend::{Backend, CursiveOutput};
 
@@ -56,13 +58,14 @@ impl PluginManager {
     pub fn event_loop(
         mut self,
         pub_key: PublicKey,
+        handle_id: SessionHandle,
         mut exit_rx: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut siv = Cursive::new();
 
         let plugin = get_plugin().unwrap();
         let mut session = plugin.as_ref().new_session();
-        let view = session.on_start(pub_key)?;
+        let view = session.on_start(&mut siv, handle_id, pub_key)?;
         siv.add_layer(view);
 
         let backend = Backend::init_ssh(
@@ -73,18 +76,27 @@ impl PluginManager {
         )
         .expect("Russh backend creation failed");
 
-        let mut runner = siv.runner(backend);
-        runner.refresh();
+        let runtime = Builder::new_multi_thread().worker_threads(2).build()?;
+        let _enter = runtime.handle().enter();
 
-        runner.post_events(true);
-        while runner.is_running() && !*exit_rx.borrow_and_update() {
-            runner.step();
-            if self.relayout_receiver.try_recv().is_ok() {
-                runner.post_events(true);
-                runner.clear();
+        {
+            let mut runner = siv.runner(backend);
+            runner.add_global_callback(Event::Refresh, move |siv| {
+                let _ = session.on_tick(siv);
+            });
+
+            runner.refresh();
+            runner.on_event(Event::Refresh);
+            let mut counter = 0usize;
+            while runner.is_running() && !*exit_rx.borrow_and_update() {
+                runner.step();
+                if counter % 10 == 0 || self.relayout_receiver.try_recv().is_ok() {
+                    runner.refresh();
+                    runner.on_event(Event::Refresh);
+                }
+                counter += 1;
             }
         }
-        session.on_end()?;
         Ok(())
     }
 }

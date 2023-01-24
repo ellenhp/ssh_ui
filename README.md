@@ -44,17 +44,16 @@ impl DialogAppSession {
 impl AppSession for DialogAppSession {
     fn on_start(
         &mut self,
-        _pub_key: ssh_ui::key::PublicKey,
+        _siv: &mut Cursive,
+        _session_handle: SessionHandle,
+        _pub_key: PublicKey,
     ) -> Result<Box<dyn cursive::View>, Box<dyn Error>> {
+        println!("on_start");
         Ok(Box::new(
             Dialog::around(TextView::new("Hello over ssh!"))
                 .title("ssh_ui")
                 .button("Quit", |s| s.quit()),
         ))
-    }
-
-    fn on_end(&mut self) -> Result<(), Box<dyn Error>> {
-        Ok(())
     }
 }
 ```

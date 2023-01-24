@@ -8,18 +8,26 @@ use std::{error::Error, sync::Arc};
 use cursive::View;
 
 pub use cursive;
-pub use russh_keys::key;
+pub use russh_keys;
 
 use russh_keys::key::KeyPair;
 use ssh::{plugin::set_plugin, server::Server, session_manager::SessionManager};
 use tokio::sync::{mpsc, watch};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SessionHandle(u64);
+
 pub trait AppSession {
     /// Called when the session starts. Returns a cursive view that will be displayed to the user.
-    fn on_start(&mut self, pub_key: key::PublicKey) -> Result<Box<dyn View>, Box<dyn Error>>;
+    fn on_start(
+        &mut self,
+        siv: &mut cursive::Cursive,
+        session_handle: SessionHandle,
+        pub_key: russh_keys::key::PublicKey,
+    ) -> Result<Box<dyn View>, Box<dyn Error>>;
 
-    /// Called when the session is over.
-    fn on_end(&mut self) -> Result<(), Box<dyn Error>> {
+    /// Called when the session ticks.
+    fn on_tick(&mut self, _siv: &mut cursive::Cursive) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 }

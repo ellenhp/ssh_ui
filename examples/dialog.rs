@@ -1,9 +1,10 @@
 use std::{error::Error, sync::Arc};
 
+use cursive::Cursive;
 use ssh_ui::{
     cursive::views::{Dialog, TextView},
-    key::KeyPair,
-    App, AppServer, AppSession,
+    russh_keys::key::{KeyPair, PublicKey},
+    App, AppServer, AppSession, SessionHandle,
 };
 
 struct DialogAppSession {}
@@ -17,7 +18,9 @@ impl DialogAppSession {
 impl AppSession for DialogAppSession {
     fn on_start(
         &mut self,
-        _pub_key: ssh_ui::key::PublicKey,
+        _siv: &mut Cursive,
+        _session_handle: SessionHandle,
+        _pub_key: PublicKey,
     ) -> Result<Box<dyn cursive::View>, Box<dyn Error>> {
         println!("on_start");
         Ok(Box::new(
@@ -25,11 +28,6 @@ impl AppSession for DialogAppSession {
                 .title("ssh_ui")
                 .button("Quit", |s| s.quit()),
         ))
-    }
-
-    fn on_end(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("on_end");
-        Ok(())
     }
 }
 

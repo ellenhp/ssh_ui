@@ -1,6 +1,6 @@
 use std::{fmt::Debug, fs::File, time::Duration};
 
-use crate::cursive::Vec2;
+use crate::{cursive::Vec2, SessionHandle};
 use async_std::io::WriteExt;
 use russh::{server::Handle, ChannelId, CryptoVec};
 use russh_keys::key::PublicKey;
@@ -56,6 +56,7 @@ impl SessionManager {
     }
 
     pub async fn wait_for_sessions(&mut self) {
+        let mut handle_cursor = 0u64;
         loop {
             let update = self.update_receiver.recv().await;
             if update.is_none() {
@@ -63,8 +64,17 @@ impl SessionManager {
             }
             match update.unwrap() {
                 SessionRepoUpdate::NewSession(handle, channel_id, update_rx, key) => {
+                    let handle_id = handle_cursor.clone();
+                    handle_cursor += 1;
                     spawn(async move {
-                        Self::handle_session(handle, channel_id, update_rx, key).await;
+                        Self::handle_session(
+                            handle,
+                            channel_id,
+                            update_rx,
+                            SessionHandle(handle_id),
+                            key,
+                        )
+                        .await;
                     });
                 }
             }
@@ -75,6 +85,7 @@ impl SessionManager {
         handle: Handle,
         channel_id: ChannelId,
         mut update_rx: Receiver<SshSessionUpdate>,
+        handle_id: SessionHandle,
         key: PublicKey,
     ) {
         let (mut ssh_side_output, bbs_side_input): (async_std::fs::File, File) = {
@@ -96,7 +107,7 @@ impl SessionManager {
         );
 
         let join_handle = std::thread::spawn(move || {
-            plugin_manager.event_loop(key, exit_rx).unwrap();
+            plugin_manager.event_loop(key, handle_id, exit_rx).unwrap();
         });
         let forwarding_task_handle = spawn(async move {
             loop {
