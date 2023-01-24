@@ -57,6 +57,7 @@ impl Server {
             config.keys.push(key.clone().into());
         }
         config.methods = MethodSet::PUBLICKEY;
+        config.connection_timeout = None;
 
         let config = Arc::new(config);
 
