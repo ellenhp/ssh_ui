@@ -11,7 +11,7 @@ readme = "README.md"
 
 [dependencies]
 russh = { version = "0.34.0", features = ["vendored-openssl"] }
-russh-keys = { version = "0.22.0", features = ["vendored-openssl"] }
+russh-keys = { version = "0.22.0" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.68"
 lazy_static = "1.4.0"

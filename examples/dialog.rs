@@ -1,6 +1,7 @@
 use std::{error::Error, sync::Arc};
 
 use cursive::Cursive;
+use russh_keys::key::SignatureHash;
 use ssh_ui::{
     cursive::views::{Dialog, TextView},
     russh_keys::key::{KeyPair, PublicKey},
@@ -45,8 +46,8 @@ impl App for DialogApp {
 
 #[tokio::main]
 async fn main() {
-    let key_pair = KeyPair::generate_ed25519().unwrap();
+    let key_pair = KeyPair::generate_rsa(3072, SignatureHash::SHA2_256).unwrap();
     let mut server = AppServer::new_with_port(2222);
     let app = DialogApp {};
-    server.run(key_pair, Arc::new(app)).await.unwrap();
+    server.run(&[key_pair], Arc::new(app)).await.unwrap();
 }

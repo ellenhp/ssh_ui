@@ -54,14 +54,14 @@ impl AppServer {
     /// Listens on the specified port for new ssh connections indefinitely.
     pub async fn run(
         &mut self,
-        key_pair: KeyPair,
+        key_pairs: &[KeyPair],
         plugin: Arc<dyn App>,
     ) -> Result<(), Box<dyn Error>> {
         set_plugin(plugin);
         let (sender, receiver) = mpsc::channel(100);
         let (_tx, rx) = watch::channel(false);
         let repo = SessionManager::new(sender.clone(), receiver);
-        let sh = Server::new(key_pair.into(), rx, sender, self.port).await;
+        let sh = Server::new(key_pairs, rx, sender, self.port).await;
         sh.listen(repo).await.unwrap();
 
         Ok(())

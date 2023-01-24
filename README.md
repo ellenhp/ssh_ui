@@ -7,14 +7,14 @@ The `main` function of the simplest `ssh_ui`-based application looks something l
 ```
 #[tokio::main]
 async fn main() {
-    let key_pair = KeyPair::generate_ed25519().unwrap();
+    let key_pair = KeyPair::generate_rsa(3072, SignatureHash::SHA2_256).unwrap();
     let mut server = AppServer::new_with_port(2222);
     let app = DialogApp {};
-    server.run(key_pair, Arc::new(app)).await.unwrap();
+    server.run(&[key_pair], Arc::new(app)).await.unwrap();
 }
 ```
 
-First this generates a new keypair (but you should load one from disk for user-facing installations). Then it initializes a new `AppServer` on port 2222 and  new instance of a `DialogApp`, then calls `AppServer::run` to listen on the specified port for incoming connections. Let's look next at what makes `AppServer` tick.
+First this generates a new keypair (but you should load several from disk for user-facing installations). Then it initializes a new `AppServer` on port 2222 and a new instance of a `DialogApp`, then calls `AppServer::run` to listen on the specified port for incoming connections. Let's look next at what makes `AppServer` tick.
 
 ```
 struct DialogApp {}

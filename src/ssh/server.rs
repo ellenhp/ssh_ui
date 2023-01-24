@@ -20,7 +20,7 @@ use super::session_manager::SessionRepoUpdate;
 pub struct Server {
     pub listen: IpAddr,
     pub port: u16,
-    pub server_key: KeyPair,
+    pub server_keys: Vec<KeyPair>,
     pub connection_timeout: Duration,
     pub auth_rejection_time: Duration,
     pub exit_rx: watch::Receiver<bool>,
@@ -30,13 +30,13 @@ pub struct Server {
 
 impl Server {
     pub async fn new(
-        server_key: KeyPair,
+        server_keys: &[KeyPair],
         rx_exit: watch::Receiver<bool>,
         sender: Sender<SessionRepoUpdate>,
         port: u16,
     ) -> Self {
         Self {
-            server_key,
+            server_keys: server_keys.to_vec(),
             connection_timeout: Duration::from_secs(600),
             auth_rejection_time: Duration::from_secs(0),
             exit_rx: rx_exit,
@@ -53,7 +53,9 @@ impl Server {
         let mut config = Config::default();
         config.connection_timeout = Some(self.connection_timeout.clone());
         config.auth_rejection_time = self.auth_rejection_time.clone();
-        config.keys.push(self.server_key.clone().into());
+        for key in &self.server_keys {
+            config.keys.push(key.clone().into());
+        }
         config.methods = MethodSet::PUBLICKEY;
 
         let config = Arc::new(config);
