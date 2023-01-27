@@ -2,6 +2,7 @@ use std::{fmt::Debug, fs::File, time::Duration};
 
 use crate::{cursive::Vec2, SessionHandle};
 use async_std::io::WriteExt;
+use log::{debug, info};
 use russh::{server::Handle, ChannelId, CryptoVec};
 use russh_keys::key::PublicKey;
 use tokio::{
@@ -23,7 +24,12 @@ pub enum SshSessionUpdate {
 }
 
 pub enum SessionRepoUpdate {
-    NewSession(Handle, ChannelId, Receiver<SshSessionUpdate>, PublicKey),
+    NewSession(
+        Handle,
+        ChannelId,
+        Receiver<SshSessionUpdate>,
+        Option<PublicKey>,
+    ),
 }
 
 impl Debug for SessionRepoUpdate {
@@ -86,8 +92,9 @@ impl SessionManager {
         channel_id: ChannelId,
         mut update_rx: Receiver<SshSessionUpdate>,
         handle_id: SessionHandle,
-        key: PublicKey,
+        key: Option<PublicKey>,
     ) {
+        info!("Handling new session {}", handle_id.0);
         let (mut ssh_side_output, bbs_side_input): (async_std::fs::File, File) = {
             let (bbs_side, ssh_side, _name) =
                 openpty::openpty(None, None, None).expect("Creating pty failed");
@@ -106,10 +113,20 @@ impl SessionManager {
             relayout_receiver,
         );
 
+        let handle_id = handle_id.clone();
         let join_handle = std::thread::spawn(move || {
+            debug!("Starting event loop thread for session: {}", handle_id.0);
             plugin_manager.event_loop(key, handle_id, exit_rx).unwrap();
+            debug!(
+                "Falling out of event loop thread for session: {}",
+                handle_id.0
+            );
         });
         let forwarding_task_handle = spawn(async move {
+            debug!(
+                "Entering output forwarding task for session: {}",
+                handle_id.0
+            );
             loop {
                 match output_receiver.recv().await {
                     Some(output) => match output {
@@ -120,7 +137,12 @@ impl SessionManager {
                                 .unwrap();
                         }
                         crate::ssh::backend::CursiveOutput::Close => {
+                            debug!(
+                                "Output forwarding task found close event on session: {}",
+                                handle_id.0
+                            );
                             handle.close(channel_id).await.unwrap();
+                            break;
                         }
                     },
                     None => {
@@ -128,8 +150,16 @@ impl SessionManager {
                     }
                 }
             }
+            debug!(
+                "Falling through output forwarding task for session: {}",
+                handle_id.0
+            );
         });
         spawn(async move {
+            debug!(
+                "Entering input forwarding task for session: {}",
+                handle_id.0
+            );
             loop {
                 let update = update_rx.recv().await;
                 if update.is_none() {
@@ -144,14 +174,21 @@ impl SessionManager {
                     SshSessionUpdate::WindowResize(width, height) => {
                         resize_sender.send(Vec2::new(width, height)).await.unwrap();
                     }
-                    SshSessionUpdate::Close => return,
+                    SshSessionUpdate::Close => {
+                        debug!(
+                            "Found close event on input forwarding task for session: {}",
+                            handle_id.0
+                        );
+                    }
                 }
             }
         })
         .await
         .unwrap();
+        debug!("Fell through input forwarding task, indicating disconnection on session {}. Aborting/joining other tasks/threads.", handle_id.0);
         let _ = exit_tx.send(true);
         forwarding_task_handle.abort();
         join_handle.join().expect("Failed to join thread");
+        info!("Cleaned up from disconnected session: {}", handle_id.0);
     }
 }

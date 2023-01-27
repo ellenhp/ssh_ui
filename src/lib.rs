@@ -13,7 +13,7 @@ use cursive::View;
 pub use cursive;
 pub use russh_keys;
 
-use russh_keys::key::KeyPair;
+use russh_keys::key::{KeyPair, PublicKey};
 use ssh::{plugin::set_plugin, server::Server, session_manager::SessionManager};
 use tokio::sync::{mpsc, watch};
 
@@ -26,7 +26,7 @@ pub trait AppSession {
         &mut self,
         siv: &mut cursive::Cursive,
         session_handle: SessionHandle,
-        pub_key: russh_keys::key::PublicKey,
+        pub_key: Option<PublicKey>,
         force_refresh_sender: Sender<()>,
     ) -> Result<Box<dyn View>, Box<dyn Error>>;
 

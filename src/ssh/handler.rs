@@ -1,10 +1,13 @@
 use anyhow::Ok;
+use log::info;
+use log::trace;
 use russh::server::Auth;
 use russh::server::Handler;
 use russh::server::Msg;
 use russh::server::Session;
 use russh::Channel;
 use russh::ChannelId;
+use russh::MethodSet;
 use russh_keys::key::PublicKey;
 use tokio::spawn;
 use tokio::sync::mpsc::Sender;
@@ -35,11 +38,12 @@ impl Handler for ThinHandler {
         channel: Channel<Msg>,
         session: Session,
     ) -> Result<(Self, bool, Session), Self::Error> {
+        info!("Channel opened");
         let (session_update_sender, session_update_receiver) = tokio::sync::mpsc::channel(100);
         self.session_update_sender = Some(session_update_sender);
         let sender = self.session_repo_update_sender.clone();
         let handle = session.handle();
-        let pubkey = self.pubkey.clone().expect("pubkey not set");
+        let pubkey = self.pubkey.clone();
         spawn(async move {
             sender
                 .send(SessionRepoUpdate::NewSession(
@@ -57,20 +61,44 @@ impl Handler for ThinHandler {
 
     async fn auth_publickey(
         mut self,
-        _user: &str,
+        user: &str,
         public_key: &PublicKey,
     ) -> Result<(Self, Auth), Self::Error> {
-        self.pubkey = Some(public_key.clone());
-        Ok((self, Auth::Accept))
+        info!(
+            "Public key auth request for user {} using key {:?}",
+            user, public_key
+        );
+        if user == "root" {
+            Ok((
+                self,
+                Auth::Reject {
+                    proceed_with_methods: None,
+                },
+            ))
+        } else {
+            self.pubkey = Some(public_key.clone());
+            Ok((self, Auth::Accept))
+        }
     }
 
-    async fn auth_none(self, _user: &str) -> Result<(Self, Auth), Self::Error> {
-        Ok((
-            self,
-            Auth::Reject {
-                proceed_with_methods: None,
-            },
-        ))
+    async fn auth_none(self, user: &str) -> Result<(Self, Auth), Self::Error> {
+        info!("`None` auth request for user {} using", user);
+        match user {
+            // This might be fun for a honeypot but anyone looking for `none` auth with a root user deserves to be shut down.
+            "root" => Ok((
+                self,
+                Auth::Reject {
+                    proceed_with_methods: None,
+                },
+            )),
+            "anon" | "anonymous" => Ok((self, Auth::Accept)),
+            _ => Ok((
+                self,
+                Auth::Reject {
+                    proceed_with_methods: Some(MethodSet::PUBLICKEY),
+                },
+            )),
+        }
     }
 
     async fn channel_close(
@@ -109,6 +137,7 @@ impl Handler for ThinHandler {
         _channel: ChannelId,
         session: Session,
     ) -> Result<(Self, Session), Self::Error> {
+        info!("shell request");
         Result::Ok((self, session))
     }
 
@@ -123,6 +152,7 @@ impl Handler for ThinHandler {
         _modes: &[(russh::Pty, u32)],
         session: Session,
     ) -> Result<(Self, Session), Self::Error> {
+        info!("pty request");
         let sender = self.session_update_sender.clone();
         spawn(async move {
             sender
@@ -147,6 +177,7 @@ impl Handler for ThinHandler {
         _pix_height: u32,
         session: Session,
     ) -> Result<(Self, Session), Self::Error> {
+        trace!("window change request");
         let sender = self.session_update_sender.clone();
         spawn(async move {
             sender

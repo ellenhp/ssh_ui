@@ -1,3 +1,5 @@
+use log::info;
+use log::trace;
 use russh::server;
 use russh::server::Config;
 use russh::MethodSet;
@@ -56,14 +58,14 @@ impl Server {
         for key in &self.server_keys {
             config.keys.push(key.clone().into());
         }
-        config.methods = MethodSet::PUBLICKEY;
+        config.methods = MethodSet::PUBLICKEY | MethodSet::NONE;
         config.connection_timeout = None;
 
         let config = Arc::new(config);
 
         let addr = format!("{}:{}", self.listen, self.port);
 
-        println!("Listening on {}", addr);
+        info!("Listening on {}", addr);
 
         spawn(async move {
             session_repository.wait_for_sessions().await;
@@ -82,7 +84,8 @@ impl Server {
 impl server::Server for Server {
     type Handler = ThinHandler;
 
-    fn new_client(&mut self, _peer_addr: Option<SocketAddr>) -> Self::Handler {
+    fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
+        trace!("New client created for peer {:?}", peer_addr);
         ThinHandler::new(self.session_sender.clone())
     }
 }

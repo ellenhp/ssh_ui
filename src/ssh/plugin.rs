@@ -6,6 +6,7 @@ use crate::cursive::Vec2;
 use crate::{App, SessionHandle};
 
 use cursive::event::Event;
+use log::trace;
 use russh_keys::key::PublicKey;
 use tokio::runtime::Builder;
 
@@ -57,10 +58,11 @@ impl PluginManager {
 
     pub fn event_loop(
         mut self,
-        pub_key: PublicKey,
+        pub_key: Option<PublicKey>,
         handle_id: SessionHandle,
         mut exit_rx: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        trace!("Entering event loop for session handle {}", handle_id.0);
         let mut siv = Cursive::new();
 
         let (client_facing_relayout_sender, client_facing_relayout_receiver) =
@@ -97,6 +99,7 @@ impl PluginManager {
                 if self.relayout_receiver.try_recv().is_ok()
                     || client_facing_relayout_receiver.try_recv().is_ok()
                 {
+                    trace!("Forcefully refreshing layout for session {}", handle_id.0);
                     // TODO: Figure out why this is necessary. It seems like we do actually need two refreshes and a step to make this work :(
                     runner.refresh();
                     runner.on_event(Event::Refresh);
@@ -108,6 +111,7 @@ impl PluginManager {
                 }
             }
         }
+        trace!("Exiting event loop for session {}", handle_id.0);
         Ok(())
     }
 }
