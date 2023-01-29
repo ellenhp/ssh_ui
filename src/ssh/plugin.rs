@@ -62,6 +62,12 @@ impl PluginManager {
         handle_id: SessionHandle,
         mut exit_rx: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(3)
+            .enable_all()
+            .build()?;
+        let _enter = runtime.handle().enter();
+
         trace!("Entering event loop for session handle {}", handle_id.0);
         let mut siv = Cursive::new();
 
@@ -80,12 +86,6 @@ impl PluginManager {
             self.relayout_sender,
         )
         .expect("Russh backend creation failed");
-
-        let runtime = Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()?;
-        let _enter = runtime.handle().enter();
 
         {
             let mut runner = siv.runner(backend);
