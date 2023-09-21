@@ -9,6 +9,7 @@ use cursive::event::Event;
 use log::trace;
 use russh_keys::key::PublicKey;
 use tokio::runtime::Builder;
+use tokio::sync::mpsc::channel;
 
 use super::backend::{Backend, CursiveOutput};
 
@@ -71,8 +72,7 @@ impl PluginManager {
         trace!("Entering event loop for session handle {}", handle_id.0);
         let mut siv = Cursive::new();
 
-        let (client_facing_relayout_sender, client_facing_relayout_receiver) =
-            std::sync::mpsc::channel();
+        let (client_facing_relayout_sender, mut client_facing_relayout_receiver) = channel(10);
 
         let plugin = get_plugin().unwrap();
         let mut session = plugin.as_ref().new_session();

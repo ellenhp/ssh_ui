@@ -3,10 +3,7 @@ pub(crate) mod ssh;
 #[macro_use]
 extern crate lazy_static;
 
-use std::{
-    error::Error,
-    sync::{mpsc::Sender, Arc},
-};
+use std::{error::Error, sync::Arc};
 
 use cursive::View;
 
@@ -15,7 +12,10 @@ pub use russh_keys;
 
 use russh_keys::key::{KeyPair, PublicKey};
 use ssh::{plugin::set_plugin, server::Server, session_manager::SessionManager};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{
+    mpsc::{self, Sender},
+    watch,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SessionHandle(u64);

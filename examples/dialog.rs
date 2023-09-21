@@ -1,7 +1,4 @@
-use std::{
-    error::Error,
-    sync::{mpsc::Sender, Arc},
-};
+use std::{error::Error, sync::Arc};
 
 use cursive::Cursive;
 use russh_keys::key::SignatureHash;
@@ -10,6 +7,7 @@ use ssh_ui::{
     russh_keys::key::{KeyPair, PublicKey},
     App, AppServer, AppSession, SessionHandle,
 };
+use tokio::sync::mpsc::Sender;
 
 struct DialogAppSession {}
 
