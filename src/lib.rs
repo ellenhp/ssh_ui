@@ -1,21 +1,14 @@
 pub(crate) mod ssh;
 
-#[macro_use]
-extern crate lazy_static;
-
 use std::{error::Error, sync::Arc};
 
 use cursive::View;
 
 pub use cursive;
-pub use russh_keys;
 
-use russh_keys::key::{KeyPair, PublicKey};
+use russh::keys::{PrivateKey, PublicKey};
 use ssh::{plugin::set_plugin, server::Server, session_manager::SessionManager};
-use tokio::sync::{
-    mpsc::{self, Sender},
-    watch,
-};
+use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SessionHandle(u64);
@@ -58,14 +51,13 @@ impl AppServer {
     /// Listens on the specified port for new ssh connections indefinitely.
     pub async fn run(
         &mut self,
-        key_pairs: &[KeyPair],
+        key_pairs: &[PrivateKey],
         plugin: Arc<dyn App>,
     ) -> Result<(), Box<dyn Error>> {
-        set_plugin(plugin);
+        set_plugin(plugin).await;
         let (sender, receiver) = mpsc::channel(100);
-        let (_tx, rx) = watch::channel(false);
-        let repo = SessionManager::new(sender.clone(), receiver);
-        let sh = Server::new(key_pairs, rx, sender, self.port).await;
+        let repo = SessionManager::new(receiver);
+        let sh = Server::new(key_pairs, sender, self.port).await;
         sh.listen(repo).await.unwrap();
 
         Ok(())

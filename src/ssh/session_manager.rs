@@ -3,12 +3,11 @@ use std::{fmt::Debug, fs::File, time::Duration};
 use crate::{cursive::Vec2, SessionHandle};
 use async_std::io::WriteExt;
 use log::{debug, info};
-use russh::{server::Handle, ChannelId, CryptoVec};
-use russh_keys::key::PublicKey;
+use russh::{keys::PublicKey, server::Handle, ChannelId, CryptoVec};
 use tokio::{
     spawn,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, Receiver},
         watch,
     },
     time::sleep,
@@ -46,19 +45,12 @@ impl Debug for SessionRepoUpdate {
 }
 
 pub struct SessionManager {
-    pub update_sender: Sender<SessionRepoUpdate>,
     pub update_receiver: Receiver<SessionRepoUpdate>,
 }
 
 impl SessionManager {
-    pub fn new(
-        update_sender: Sender<SessionRepoUpdate>,
-        update_receiver: Receiver<SessionRepoUpdate>,
-    ) -> Self {
-        Self {
-            update_sender,
-            update_receiver,
-        }
+    pub fn new(update_receiver: Receiver<SessionRepoUpdate>) -> Self {
+        Self { update_receiver }
     }
 
     pub async fn wait_for_sessions(&mut self) {
@@ -105,18 +97,20 @@ impl SessionManager {
         let (exit_tx, exit_rx) = watch::channel(false);
         let (relayout_sender, relayout_receiver) = channel(100);
 
-        let plugin_manager = PluginManager::new(
-            bbs_side_input,
-            output_sender,
-            resize_receiver,
-            relayout_sender,
-            relayout_receiver,
-        );
-
         let handle_id = handle_id.clone();
-        let join_handle = std::thread::spawn(move || {
+        let join_handle = tokio::spawn(async move {
+            let plugin_manager = PluginManager::new(
+                bbs_side_input,
+                output_sender,
+                resize_receiver,
+                relayout_sender,
+                relayout_receiver,
+            );
             debug!("Starting event loop thread for session: {}", handle_id.0);
-            plugin_manager.event_loop(key, handle_id, exit_rx).unwrap();
+            plugin_manager
+                .event_loop(key, handle_id, exit_rx)
+                .await
+                .unwrap();
             debug!(
                 "Falling out of event loop thread for session: {}",
                 handle_id.0
@@ -188,7 +182,7 @@ impl SessionManager {
         debug!("Fell through input forwarding task, indicating disconnection on session {}. Aborting/joining other tasks/threads.", handle_id.0);
         let _ = exit_tx.send(true);
         forwarding_task_handle.abort();
-        join_handle.join().expect("Failed to join thread");
+        join_handle.await.expect("Failed to join thread");
         info!("Cleaned up from disconnected session: {}", handle_id.0);
     }
 }
