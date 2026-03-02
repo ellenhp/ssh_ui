@@ -1,5 +1,7 @@
 # ssh_ui
 
+**March 2026:** I think this project may have been one of the first ways to run a captive TUI over ssh in Rust, but there are better ways to do this now. This project uses very outdated versions of cursive and russh and [upgrading them seems pretty onerous](https://github.com/ellenhp/ssh_ui/tree/ellenhp/upgrade_russh_wip). Archived for posterity.
+
 `ssh_ui` helps you painlessly turn a [cursive](https://crates.io/crates/cursive)-based terminal UI (TUI) into an application accessible over ssh. Designed to make the creation of BBS systems or ssh-based games simple, `ssh_ui` takes a minimally opinionated approach to opening a TUI up to remote connections, beyond requiring you to use `cursive`. The ssh server implementation is provided by [russh](https://crates.io/crates/russh).
 
 The `main` function of the simplest `ssh_ui`-based application looks something like this:
